@@ -7,7 +7,11 @@ _No routes found._
 <!-- sdlc:auto:end endpoints -->
 
 <!-- sdlc:auto:start drift -->
-_Code matches the designed API._
+**Designed but missing:**
+
+- GET /api/cities/search
+- GET /api/health
+- GET /api/weather
 <!-- sdlc:auto:end drift -->
 
 <!-- sdlc:auto:start source -->

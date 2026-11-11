@@ -2,6 +2,56 @@
 openapi: 3.1.0
 info:
   title: weather app
-  version: architecture-v0
+  version: architecture-v1
   description: Designed API from the approved architecture (not extracted from code).
-paths: {}
+paths:
+  /api/cities/search:
+    get:
+      summary: Geocode a city name and return matching cities with country and region/state
+        for disambiguation. Empty or whitespace que
+      description: Geocode a city name and return matching cities with country and
+        region/state for disambiguation. Empty or whitespace query returns 422 so
+        the SPA prompts for input. Zero matches returns an empty list (SPA shows friendly
+        not-found).
+      operationId: get_api_cities_search
+      parameters: []
+      responses:
+        '200':
+          description: '200 {"results": [{"name": "...", "country": "US", "state":
+            "...", "lat": 0.0, "lon": 0.0}]}; 422 {"message": "Please enter a city
+            name"}; 503/502 {"message": "Weather service temporarily unavailable -
+            please try again"}'
+      security:
+      - bearerAuth: []
+  /api/health:
+    get:
+      summary: Liveness/readiness check for deployment and monitoring.
+      description: Liveness/readiness check for deployment and monitoring.
+      operationId: get_api_health
+      parameters: []
+      responses:
+        '200':
+          description: '200 {"status": "ok"}'
+  /api/weather:
+    get:
+      summary: 'Return current weather for a selected city by coordinates: city name,
+        temperature (Celsius), condition text and icon, hu'
+      description: 'Return current weather for a selected city by coordinates: city
+        name, temperature (Celsius), condition text and icon, humidity, wind and feels-like.
+        Values absent from the provider are marked unavailable.'
+      operationId: get_api_weather
+      parameters: []
+      responses:
+        '200':
+          description: '200 {"city": "...", "country": "...", "temp_c": 0.0, "feels_like_c":
+            0.0, "condition": "Clear", "icon": "01d", "humidity": 50, "wind_ms": 3.2};
+            fields may be null when unavailable; 503 {"message": "Weather data is
+            temporarily unavailable - try again later"}; 502 {"message": "Could not
+            load weather - please retry"}'
+      security:
+      - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
