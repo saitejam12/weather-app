@@ -5,205 +5,221 @@
 <!-- sdlc:auto:start narrative -->
 ## Summary
 
+### REQ-STACK · approved · source: requirements:technology-stack
+
+Product owner approved an exact technology stack for this lightweight app; the design must not substitute alternatives.
+
+- Backend: FastAPI 0.115 -- thin proxy to keep WEATHER_API_KEY off the browser and forward city-search/weather calls as clean JSON.
+- Cloud: AWS -- free/public page needs globally reachable hosting that scales to near-zero and is the platform default.
+- Database: PostgreSQL 16 -- scope stores no user data, so DB sits mostly idle now; safe default if favourites/history are added later.
+- Frontend: React 19 -- one interactive screen (search, city-picker, weather card, instant C/F toggle) needing type-ahead and live updates without reload.
+
+### REQ-SERVICES · approved · source: requirements:services
+
+Two runtime services approved: OpenWeatherMap for weather/geocoding data, Redis for caching lookups.
+
+- Weather: OpenWeatherMap (custom, env WEATHER_API_KEY) -- supplies temperature, condition, icon, humidity, wind, feels-like, and city geocoding for search/disambiguation.
+- Cache: Redis (container redis:7-alpine) -- caches recent lookups for a few minutes to keep the app fast and stay within the weather provider's call limits.
+- Required API keys/env vars: REDIS_URL, WEATHER_API_KEY.
+
+**Related:** REQ-STACK, US-010, US-011
+
 ### EPIC-001 · draft · source: requirements:EPIC-001
 
-Entry point of the app: lets any visitor find a city by name, choose among matches when ambiguous, and handles names that can't be found. No login required.
+Entry point to the app: find a city by name, choose among matches, and handle names that cannot be found. No login or account required.
 
-Covers city search and disambiguation as the first thing a user does in the app. Includes US-001 (search by name), US-002 (disambiguate multiple matches), US-003 (handle not-found/search errors).
+Covers city search, disambiguation when a name matches multiple places, and friendly handling of not-found/error cases.
 
 **Related:** US-001, US-002, US-003
 
-### EPIC-002 · draft · source: requirements:EPIC-002
-
-Shows current conditions for the chosen city: temperature, condition text + icon, humidity, wind, feels-like. Deliberately excludes multi-day forecast, favourites, and geolocation.
-
-Covers US-004 (temperature + condition display), US-005 (weather details: humidity/wind/feels-like), US-006 (confirms out-of-scope features are absent: no forecast, no favourites, no geolocation).
-
-**Related:** US-004, US-005, US-006
-
-### EPIC-003 · draft · source: requirements:EPIC-003
-
-Cross-cutting experience: Celsius/Fahrenheit toggle, responsive layout for mobile and desktop, and open public access in English with no accounts and no localisation.
-
-Covers US-007 (unit toggle), US-008 (responsive mobile/desktop), US-009 (open public access, English-only, global audience, no login/payment).
-
-**Related:** US-007, US-008, US-009
-
-### EPIC-004 · draft · source: requirements:EPIC-004
-
-Connects the app to OpenWeatherMap as the live source of current-weather and city-lookup data, including resilient handling when the service is slow, rate-limited, or unavailable.
-
-Covers US-010 (serve live weather from OpenWeatherMap, API key dependency) and US-011 (stay resilient when weather service is degraded).
-
-**Related:** US-010, US-011
-
 ### US-001 · draft · source: requirements:US-001
 
-Critical story: a visitor can type a city name into a search box and submit it to look up current weather, with no account needed.
+Critical story: visitor types a city name into a search box and submits it to look up current weather.
 
-AC-001: Typing a city name and submitting it begins a lookup and shows results. AC-002: Submitting an empty search box does not perform a lookup and instead prompts the user to enter a city name. AC-003: The search box can be used freely with no login or registration required.
+- AC-001: Typing a name and submitting begins showing matching results.
+- AC-002: Empty search box does not perform a lookup; user is prompted to enter a name.
+- AC-003: No account or login is ever required to search.
 
-**Related:** EPIC-001, NFR-006
+**Related:** EPIC-001
 
 ### US-002 · draft · source: requirements:US-002
 
-High priority: when a search matches more than one city, the user picks the intended one from a disambiguated list; a single match goes straight to weather.
+High-priority story: when a search matches more than one city, the user picks the intended one.
 
-AC-004: When a search term matches multiple cities (e.g. same name, different country/region), the app shows the matches with enough detail (country, region/state) to tell them apart. AC-005: Selecting one of the listed cities shows its current weather. AC-006: When exactly one city matches, its weather is shown directly without a disambiguation step.
+- AC-004: Multiple matches are shown with enough detail (country, region/state) to tell them apart.
+- AC-005: Selecting a listed city shows its current weather.
+- AC-006: Exactly one match shows weather directly, with no disambiguation step.
 
 **Related:** EPIC-001
 
 ### US-003 · draft · source: requirements:US-003
 
-High priority: clear, friendly messaging when a city can't be found or the search itself fails, instead of technical errors or a crash.
+High-priority story: clear, friendly messaging when a city can't be found or the search fails.
 
-AC-007: A search matching no known city shows a friendly not-found message inviting the user to try a different spelling/name, with no technical error shown. AC-008: If the weather data service is unavailable or errors out during a search, the app shows a clear error message and lets the user retry, without crashing or exposing raw technical details.
+- AC-007: No matching city produces a friendly not-found message inviting a different spelling/name, never a technical error.
+- AC-008: If the weather data service is unavailable or errors, a clear error message lets the user retry without crashing or exposing technical details.
 
 **Related:** EPIC-001, NFR-005, NFR-006
 
+### EPIC-002 · draft · source: requirements:EPIC-002
+
+Shows current conditions for the chosen city: temperature, condition with icon, humidity, wind, feels-like. Current weather only -- no forecast, favourites, or geolocation.
+
+Deliberately scoped to current weather for a searched city; explicitly excludes multi-day forecast, saved favourites, and geolocation-based lookup.
+
+**Related:** US-004, US-005, US-006
+
 ### US-004 · draft · source: requirements:US-004
 
-Critical story: once a city is selected, the app shows city name, current temperature, and a text condition with matching icon, with a loading state while data is fetched.
+Critical story: display current temperature and condition with icon for a selected city, with a loading indicator while data loads.
 
-AC-009: After selecting a city, the app displays the city name, current temperature, and a text condition (e.g. sunny, rainy) with a matching weather icon. AC-010: While weather data for the selected city has not yet arrived, the app shows a loading indication rather than a blank or broken screen.
+- AC-009: Displays city name, current temperature, text condition (e.g. sunny, rainy) and a matching icon.
+- AC-010: Shows a loading indication while data is being retrieved, rather than a blank/broken screen.
 
 **Related:** EPIC-002, NFR-006
 
 ### US-005 · draft · source: requirements:US-005
 
-High priority: alongside temperature, the app shows humidity, wind, and feels-like for a fuller picture of current conditions.
+High-priority story: show humidity, wind and feels-like alongside temperature for a fuller picture.
 
-AC-011: Displayed weather includes humidity, wind, and feels-like values for the selected city. AC-012: If a specific detail (humidity, wind, or feels-like) is not provided by the weather source, it is omitted or clearly marked unavailable rather than shown blank or misleading.
+- AC-011: Humidity, wind, and feels-like values are shown for the selected city.
+- AC-012: Any value not provided by the data source is omitted or clearly marked unavailable, never shown blank or misleading.
 
 **Related:** EPIC-002
 
 ### US-006 · draft · source: requirements:US-006
 
-Low priority scope-confirmation story: the MVP intentionally has no multi-day forecast, no saved favourites, and no geolocation-based lookup.
+Low-priority scope-confirmation story: app must stay limited to current weather for a searched city.
 
-AC-013: Reviewing available features on the weather display confirms there is no multi-day forecast, no saved favourites, and no geolocation-based lookup, consistent with the agreed current-weather-only scope.
+- AC-013: No multi-day forecast, no saved favourites, no geolocation-based lookup -- consistent with the agreed MVP scope.
 
 **Related:** EPIC-002
 
+### EPIC-003 · draft · source: requirements:EPIC-003
+
+Cross-cutting experience: Celsius/Fahrenheit toggle, English-only UI for a global audience, open public access, responsive layout.
+
+No accounts, no region-specific rules, no localisation beyond the unit toggle; must work on mobile and desktop browsers.
+
+**Related:** US-007, US-008, US-009
+
 ### US-007 · draft · source: requirements:US-007
 
-High priority: users can switch between Celsius and Fahrenheit, with all temperature values updating immediately and the choice persisting for the session.
+High-priority story: switch displayed temperatures between Celsius and Fahrenheit.
 
-AC-014: Toggling the unit switch updates all displayed temperature and feels-like values immediately. AC-015: The last-selected unit is carried over when searching for or selecting another city in the same session.
+- AC-014: Switching the toggle updates all temperature and feels-like values immediately.
+- AC-015: The last-selected unit is remembered for newly searched/selected cities in the same session.
 
 **Related:** EPIC-003, NFR-003
 
 ### US-008 · draft · source: requirements:US-008
 
-High priority: the app adapts to mobile and desktop browser screen sizes as a responsive web app, with no native app install required.
+High-priority story: app adapts to mobile and desktop screen sizes.
 
-AC-016: On a small mobile screen, search and weather results adapt with readable text and usable controls, no horizontal scrolling or overlapping elements. AC-017: On a desktop browser, the layout adapts to the larger screen and stays readable and usable. AC-018: The app is delivered as a responsive web app requiring no native mobile app installation.
+- AC-016: Small mobile screens get a readable, usable layout with no horizontal scrolling or overlap.
+- AC-017: Desktop screens remain readable and usable.
+- AC-018: Delivered as a responsive web app; no native mobile app install required.
 
 **Related:** EPIC-003, NFR-007
 
 ### US-009 · draft · source: requirements:US-009
 
-Medium priority: any visitor worldwide can open and use the app in English, free of charge, with no account, login, or payment step.
+Medium-priority story: open public access in English, no account or payment, for a global audience.
 
-AC-019: A new visitor can immediately search for a city with no login, registration, payment, or billing step. AC-020: The UI is presented in English from any region, with no region-specific rules or restrictions. Assumption noted in requirements: audience is global with English-only UI and no localisation beyond the Celsius/Fahrenheit toggle.
+- AC-019: New visitors can search immediately -- no login, registration, payment or billing step.
+- AC-020: UI is presented in English worldwide with no region-specific rules; assumption is English-only with no localisation beyond the C/F toggle.
 
 **Related:** EPIC-003, NFR-002, NFR-008
 
+### EPIC-004 · draft · source: requirements:EPIC-004
+
+Connects the app to OpenWeatherMap as the live data source, including API key handling and resilience when the provider is degraded.
+
+Covers both the integration itself and graceful degradation (slow/rate-limited/unavailable provider).
+
+**Related:** US-010, US-011
+
 ### US-010 · draft · source: requirements:US-010
 
-Critical story: weather shown to users is sourced live from OpenWeatherMap, authenticated server-side via a secret API key never exposed to the browser.
+Critical story: weather shown must come from the live OpenWeatherMap API, authenticated server-side.
 
-AC-021: Temperature, condition, icon, humidity, wind, and feels-like values are sourced from the live OpenWeatherMap API. Assumption noted: OpenWeatherMap is the chosen current-weather source for this version. AC-022: The app authenticates to the weather API using a configured WEATHER_API_KEY that is not exposed to end users. Assumption noted: a valid OpenWeatherMap API key is provisioned via WEATHER_API_KEY.
+- AC-021: Temperature, condition, icon, humidity, wind, feels-like all sourced from OpenWeatherMap (assumption: OpenWeatherMap chosen for this version).
+- AC-022: App authenticates to the provider using a configured WEATHER_API_KEY never exposed to end users (assumption: a valid key is provisioned via WEATHER_API_KEY).
 
-**Related:** EPIC-004, NFR-001
+**Related:** EPIC-004, NFR-001, NFR-004
 
 ### US-011 · draft · source: requirements:US-011
 
-Medium priority: when the weather provider is slow, unreachable, or rate-limited, the app informs the user clearly and allows retry rather than breaking.
+Medium-priority story: app behaves sensibly when the weather service is slow or unavailable.
 
-AC-023: If the weather API is unreachable, times out, or errors, the app shows a clear, non-technical error message and lets the user retry. AC-024: If the weather API reports its request limit reached, the app communicates that weather data is temporarily unavailable and invites the user to try again later, rather than showing a raw error.
+- AC-023: Unreachable/timeout/error responses from the provider produce a clear, non-technical message with a retry option.
+- AC-024: Rate-limit responses are communicated as temporary unavailability, inviting a later retry, rather than a raw error.
 
 **Related:** EPIC-004, NFR-004, NFR-005, NFR-006
 
 ### NFR-001 · draft · source: requirements:NFR-001
 
-Security requirement: the OpenWeatherMap API key must stay server-side only and never reach the browser.
+Security: the weather API key must stay server-side only.
 
-The weather provider API key must be held only on the server and used to authenticate calls to OpenWeatherMap; it must never be sent to or exposed in the browser. Applies to US-010.
+WEATHER_API_KEY is held only on the server and used to authenticate OpenWeatherMap calls; it must never be sent to or exposed in the browser.
 
 **Related:** US-010
 
 ### NFR-002 · draft · source: requirements:NFR-002
 
-Privacy requirement: no accounts, no login, no stored personal data — anonymous use only.
+Privacy: no accounts or personal data are collected.
 
-The app requires no login, registration, payment or billing and stores no personal information about visitors; anyone can use it anonymously. Applies to US-009.
+No login, registration, payment or billing; no personal information about visitors is stored; usage is anonymous.
 
 **Related:** US-009
 
 ### NFR-003 · draft · source: requirements:NFR-003
 
-Performance requirement: unit toggle must update all temperature values instantly without a page reload.
+Performance: unit toggle must update instantly.
 
-When the user switches between Celsius and Fahrenheit, all displayed temperature and feels-like values must update immediately without reloading the page. Applies to US-007.
+Switching Celsius/Fahrenheit updates all displayed temperature and feels-like values immediately, without a page reload.
 
 **Related:** US-007
 
 ### NFR-004 · draft · source: requirements:NFR-004
 
-Performance requirement: cache recent lookups for a few minutes to stay fast and within provider rate limits.
+Performance: cache recent lookups for a few minutes.
 
-Recent city and weather lookups must be cached for a few minutes so the app stays fast for popular searches and stays within the weather provider's request limits. Applies to US-010, US-011.
+Caching recent city and weather lookups keeps the app fast for popular searches and keeps calls within the weather provider's request limits.
 
 **Related:** US-010, US-011
 
 ### NFR-005 · draft · source: requirements:NFR-005
 
-Availability requirement: app must keep working and show clear retry messaging when the weather service is degraded.
+Availability: app must stay usable when the weather service is degraded.
 
-When the weather service is slow, unreachable, rate-limited or returns an error, the app must stay working, show a clear message and let the user retry, rather than crashing or leaving a broken page. Applies to US-003, US-011.
+Slow, unreachable, rate-limited, or erroring weather service must still result in a working app: clear message plus retry, never a crash or broken page.
 
 **Related:** US-003, US-011
 
 ### NFR-006 · draft · source: requirements:NFR-006
 
-Usability requirement: messages must be clear, friendly, and non-technical; loading state shown while data is fetched.
+Usability: messages must be clear and non-technical.
 
-Not-found results and failures must be shown as clear, friendly messages that invite the user to try again or try a different spelling, never showing raw technical details. While weather is loading, the app shows a loading indication rather than a blank or broken screen. Applies to US-003, US-004, US-011.
+Not-found and failure messages are friendly and invite retry/different spelling, never raw technical details; a loading indicator is shown while weather data is in flight.
 
 **Related:** US-003, US-004, US-011
 
 ### NFR-007 · draft · source: requirements:NFR-007
 
-Compatibility requirement: responsive design for mobile and desktop with no native app install.
+Compatibility: responsive on mobile and desktop, no native app required.
 
-The app must adapt to small mobile and larger desktop browser screens with readable text and usable controls, no horizontal scrolling or overlapping elements, and must work as a web app with no native app installation. Applies to US-008.
+Adapts to small mobile and larger desktop browser screens with readable text, usable controls, no horizontal scrolling or overlap; runs as a web app with no native installation.
 
 **Related:** US-008
 
 ### NFR-008 · draft · source: requirements:NFR-008
 
-Accepted-risk requirement: English-only interface, no localisation beyond the unit toggle, for a global audience.
+Compliance (accepted risk): English-only UI, no localisation.
 
-The interface is presented in English only for a global audience, with no region-specific rules or localisation beyond the Celsius/Fahrenheit toggle; other languages and regional formats are deliberately left out of this version. Applies to US-009. Flagged in requirements as an accepted risk.
+Interface is English only for a global audience; no region-specific rules or localisation beyond the Celsius/Fahrenheit toggle -- other languages/regional formats are deliberately out of scope for this version.
 
 **Related:** US-009
-
-### REQ-STACK · approved · source: requirements:tech-stack
-
-Technology stack approved by the product owner for this lightweight-scope app: FastAPI backend, AWS cloud, PostgreSQL database, React frontend.
-
-Backend: FastAPI 0.115 — thin proxy between browser and weather provider, keeps WEATHER_API_KEY secret, forwards city-search and weather lookups. Cloud: AWS — reliable, globally reachable hosting that scales to near-zero when quiet and absorbs spikes without server management; platform default. Database: PostgreSQL 16 — app stores no user data currently (no accounts, favourites, or history), so DB sits mostly idle; provisioned as the safe default for future use (e.g. remembered searches or logging). Frontend: React 19 — handles the single interactive screen (search box, city-picker, weather card with instant-updating Celsius/Fahrenheit toggle) and the responsive mobile/desktop layout.
-
-**Related:** US-001, US-004, US-007, US-010
-
-### REQ-SERVICES · approved · source: requirements:services
-
-Runtime services approved by the product owner: OpenWeatherMap for weather/city data, Redis for caching.
-
-Weather: OpenWeatherMap (custom, env WEATHER_API_KEY) — supplies current temperature, condition, icon, humidity, wind, feels-like, and the city geocoding powering search-and-disambiguate; assumed provider per project notes. Cache: Redis (container redis:7-alpine) — caches recent city/weather lookups for a few minutes to keep the app fast, reduce API cost, and protect against free-tier rate limits when many users search popular cities at once. Required API keys/env vars: REDIS_URL, WEATHER_API_KEY.
-
-**Related:** US-002, US-010, US-011, NFR-004
 <!-- sdlc:auto:end narrative -->
 
 <!-- sdlc:auto:start summary -->

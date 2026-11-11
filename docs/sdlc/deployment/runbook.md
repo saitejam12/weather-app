@@ -15,7 +15,9 @@ Redeploy the last good version from the platform's Deployment tab, or revert the
 <!-- sdlc:auto:end rollback -->
 
 <!-- sdlc:auto:start recent-failures -->
-_No failed deployments recorded._
+| Date | Version | Summary |
+|---|---|---|
+| 2026-11-11 | 449368e886bd | The deploy workflow did not finish successfully. Its log on GitHub says what stopped it. |
 <!-- sdlc:auto:end recent-failures -->
 
 ## Contacts and escalation

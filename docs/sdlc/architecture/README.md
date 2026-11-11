@@ -5,89 +5,135 @@
 <!-- sdlc:auto:start narrative -->
 ## Overview
 
-### ARCH-001 · approved · source: architecture:summary
+### ARCH-summary · approved · source: architecture:summary
 
-Overall architecture is a lightweight, no-accounts public weather app: a React SPA talks to a thin FastAPI backend that proxies OpenWeatherMap, with Redis caching for speed and rate-limit protection. PostgreSQL is provisioned but unused in this scope. Hosted on AWS.
+Lightweight public weather app, no accounts: React 19 SPA talks to a thin FastAPI backend that keeps the OpenWeatherMap key server-side, geocodes cities, fetches weather, and caches lookups in Redis.
 
-Approved, version 1. A React 19 single-page app (own origin) provides a search box, a city-disambiguation picker, a current-weather card (humidity/wind/feels-like), and an instant Celsius/Fahrenheit toggle. It calls a separate-origin FastAPI 0.115 backend that keeps the OpenWeatherMap API key server-side, geocodes city names, fetches current weather, caches recent lookups in Redis for a few minutes (speed + provider rate-limit protection), and returns clean JSON with friendly not-found and error handling. PostgreSQL 16 is provisioned per the approved stack but idle in this scope since no visitor data is stored. Deployed on AWS.
+SPA and API are on separate origins. PostgreSQL 16 is provisioned per the approved stack but idle since nothing about visitors is stored. Deployed on AWS.
 
-### ARCH-002 · approved · source: architecture:component:frontend
+**Related:** REQ-STACK, REQ-SERVICES
 
-Weather SPA (React 19): the single-screen client app covering search, disambiguation, weather display, and unit toggling.
+### ARCH-frontend · approved · source: architecture:component:frontend
 
-Single-screen React app comprising: search box; city-picker shown for ambiguous city names; current-weather card; instant Celsius/Fahrenheit toggle with client-side conversion and unit remembered for the session; loading indicator; friendly not-found and error states. Responsive layout for mobile and desktop. Reads backend location from the VITE_API_BASE_URL environment variable.
+Weather SPA (React 19): the single screen covering search, disambiguation, weather display and unit toggle.
 
-### ARCH-003 · approved · source: architecture:component:api
+Search box, city-picker for ambiguous names, current-weather card, instant client-side C/F toggle (unit remembered for the session), loading indicator, friendly not-found/error states. Responsive mobile/desktop layout. Reads API base URL from VITE_API_BASE_URL.
 
-Weather Proxy API (FastAPI 0.115): thin backend between the browser and OpenWeatherMap that hides the provider API key and normalizes responses/errors.
+**Related:** US-001, US-002, US-004, US-005, US-007, US-008
 
-Keeps WEATHER_API_KEY server-side (never exposed to the browser). Exposes city-search (geocoding/disambiguation) and current-weather endpoints. Caches lookups in Redis. Maps provider errors, timeouts, and rate-limit responses to clear, non-technical JSON error messages. Returns clean JSON to the SPA.
+### ARCH-api · approved · source: architecture:component:api
 
-### ARCH-004 · approved · source: architecture:component:cache
+Weather Proxy API (FastAPI 0.115): thin backend between browser and OpenWeatherMap.
 
-Lookup Cache (Redis 7, redis:7-alpine): short-TTL cache of recent geocoding and weather lookups.
+Keeps WEATHER_API_KEY server-side; exposes city-search (geocoding/disambiguation) and current-weather endpoints; caches lookups in Redis; maps provider errors/timeouts/rate-limits to clear non-technical JSON; returns clean JSON.
 
-Caches recent geocoding and current-weather responses keyed by query/coordinates for a short TTL (a few minutes). Purpose: keep the app fast for popular cities and stay within the OpenWeatherMap provider's request/rate limits. Checked before any call to the external provider.
+**Related:** US-003, US-010, US-011, NFR-001, NFR-004
 
-### ARCH-005 · approved · source: architecture:component:database
+### ARCH-cache · approved · source: architecture:component:cache
 
-PostgreSQL 16 is provisioned as the approved default stack database but is idle in this scope -- no application tables, no visitor data stored.
+Lookup Cache (Redis 7, redis:7-alpine): short-TTL cache of recent geocoding and weather responses.
 
-Provisioned as the safe default should remembered searches or logging be added later. Consistent with the no-accounts/no-personal-data design of this release, it currently holds no application tables and performs no function in the current critical paths.
+Keyed by query/coordinates, keeps the app fast for popular cities and keeps calls within the provider's request limits.
 
-### ARCH-006 · approved · source: architecture:component:weather_provider
+**Related:** NFR-004, US-010, US-011
 
-OpenWeatherMap is the external REST provider supplying city geocoding (for search/disambiguation) and current weather data.
+### ARCH-database · approved · source: architecture:component:database
 
-Supplies: city geocoding for search/disambiguation, and current weather (temperature, condition, icon, humidity, wind, feels-like). Authenticated via WEATHER_API_KEY, which is held only on the backend per ARCH-003.
+PostgreSQL 16, provisioned but idle in this scope.
 
-### ARCH-007 · approved · source: architecture:critical_path:city_search_and_disambiguation
+Safe default per the approved stack if remembered searches or logging are added later; no visitor data stored, so it holds no application tables currently.
 
-Critical path for searching a city name and resolving it to a specific location, including disambiguation when multiple matches exist.
+**Related:** NFR-002
 
-User submits a city name. Empty input is rejected client-side before any API call. The API geocodes the name via OpenWeatherMap, checking the cache first. Zero matches return a friendly not-found message. Exactly one match flows straight through to the weather view. Multiple matches return a list of candidates with country and region/state so the user can disambiguate.
+### ARCH-weather_provider · approved · source: architecture:component:weather_provider
 
-### ARCH-008 · approved · source: architecture:critical_path:current_weather_retrieval
+OpenWeatherMap REST API: external provider for geocoding and current weather.
 
-Critical path for fetching current weather for a chosen city, with caching and resilient error handling.
+Supplies city geocoding for search/disambiguation and current weather (temperature, condition, icon, humidity, wind, feels-like). Authenticated with WEATHER_API_KEY.
 
-For a selected city (identified by coordinates), the API returns current weather. The cache is checked first; on a cache miss, it calls OpenWeatherMap. Timeouts, errors, and rate-limit responses from the provider are mapped to clear, non-technical messages the SPA can display along with a retry option. Any detail values missing from the provider are marked unavailable rather than left blank.
+**Related:** US-010, US-011, NFR-001
 
-### ARCH-009 · approved · source: architecture:endpoints
+### ARCH-path-search · approved · source: architecture:critical_path:city-search
 
-Three API endpoints: city search/geocoding, current weather, and a health check.
+City search and disambiguation critical path.
 
-GET /api/cities/search -- geocodes a city name and returns matching cities with country and region/state for disambiguation; empty/whitespace query returns 422 so the SPA prompts for input; zero matches returns an empty list (SPA shows friendly not-found). GET /api/weather -- returns current weather for a selected city by coordinates: city name, temperature in Celsius, condition text and icon, humidity, wind, and feels-like; values absent from the provider are marked unavailable. GET /api/health -- liveness/readiness check used for deployment and monitoring.
+User submits a city name; empty input rejected client-side; API geocodes via OpenWeatherMap (cache checked first). Zero matches -> friendly not-found. One match -> flows straight to weather. Multiple matches -> list with country and region/state to disambiguate.
 
-### ARCH-010 · approved · source: architecture:deployment_nodes
+**Related:** US-001, US-002, US-003
 
-Deployment topology on AWS: static SPA on S3/CloudFront, containerized API on ECS Fargate/App Runner, Redis cache, idle RDS PostgreSQL, and the external OpenWeatherMap provider.
+### ARCH-path-weather · approved · source: architecture:critical_path:current-weather
 
-SPA Hosting: React static build served via S3 + CloudFront (SPA origin, static assets on CDN). API Service: FastAPI container on AWS (ECS Fargate / App Runner), Python 3.12, FastAPI 0.115 + uvicorn. Cache: Redis (redis:7-alpine) container / ElastiCache, Redis 7. Database: PostgreSQL 16 on RDS (provisioned, idle). OpenWeatherMap: external SaaS weather & geocoding provider reached over HTTPS REST.
+Current weather retrieval with caching and resilience.
 
-### ARCH-011 · approved · source: architecture:technology_decision:frontend
+For a selected city (by coordinates), API checks cache first, calls OpenWeatherMap on a miss. Timeouts, errors and rate-limit responses map to clear, non-technical messages the SPA shows with a retry. Missing detail values are marked unavailable rather than blank.
 
-Frontend technology chosen: React 19 (over Vue, Svelte).
+**Related:** US-004, US-005, US-011
 
-Rationale: the whole product is one interactive screen -- search, city-picker, weather card, and an instant C/F toggle. React 19 handles type-ahead and live client-side unit conversion with no reload, and makes the responsive mobile/desktop layout straightforward. Built as a Vite SPA served from its own origin, reading VITE_API_BASE_URL. Alternatives considered: Vue, Svelte.
+### ARCH-endpoint-search · approved · source: architecture:endpoint:/api/cities/search
 
-### ARCH-012 · approved · source: architecture:technology_decision:backend
+GET /api/cities/search -- geocodes a city name into disambiguation candidates.
 
-Backend technology chosen: FastAPI 0.115 (over Express, Flask).
+Returns matching cities with country and region/state. Empty/whitespace query returns 422 (SPA prompts for input). Zero matches returns an empty list (SPA shows friendly not-found).
 
-Rationale: a thin proxy is needed to keep WEATHER_API_KEY off the browser and to forward geocoding and weather calls as clean JSON. FastAPI 0.115 is lightweight, async-friendly for calling an external API, and quick to build this small surface in. Alternatives considered: Express, Flask.
+**Related:** US-001, US-002, US-003
 
-### ARCH-013 · approved · source: architecture:technology_decision:database
+### ARCH-endpoint-weather · approved · source: architecture:endpoint:/api/weather
 
-Database technology chosen: PostgreSQL 16, provisioned but unused for now (alternatives: none/stateless, SQLite).
+GET /api/weather -- returns current weather for a selected city by coordinates.
 
-Rationale: provisioned as the approved safe default should remembered searches or logging be added later. In this scope it stores nothing and sits idle, consistent with the no-accounts/no-personal-data design. Alternatives considered: None (stateless), SQLite.
+Returns city name, temperature (Celsius), condition text and icon, humidity, wind and feels-like. Values absent from the provider are marked unavailable.
 
-### ARCH-014 · approved · source: architecture:technology_decision:cloud
+**Related:** US-004, US-005
 
-Cloud platform chosen: AWS (over GCP, Azure).
+### ARCH-endpoint-health · approved · source: architecture:endpoint:/api/health
 
-Rationale: a free public weather page needs globally reachable hosting that scales down when quiet and absorbs spikes without managing servers. AWS (CloudFront/S3 for the SPA, a scale-to-near-zero container for the API, ElastiCache/RDS) covers this and is the platform default. Alternatives considered: GCP, Azure.
+GET /api/health -- liveness/readiness check for deployment and monitoring.
+
+Used by deployment and monitoring tooling to confirm the API service is up.
+
+### ARCH-deployment · approved · source: architecture:deployment_nodes
+
+Planned AWS deployment topology for the SPA, API, cache, database and external provider.
+
+- SPA Hosting: React static build on S3 + CloudFront (SPA origin), static assets on CDN.
+- API Service: FastAPI container on AWS (ECS Fargate / App Runner), Python 3.12, FastAPI 0.115 + uvicorn.
+- Cache: Redis (redis:7-alpine) container / ElastiCache, Redis 7.
+- Database: PostgreSQL 16 (RDS).
+- OpenWeatherMap: external SaaS weather & geocoding provider over HTTPS REST.
+
+**Related:** ARCH-frontend, ARCH-api, ARCH-cache, ARCH-database, ARCH-weather_provider
+
+### ARCH-tech-frontend · approved · source: architecture:technology_decision:frontend
+
+React 19 chosen over Vue/Svelte for the frontend.
+
+The whole product is one interactive screen -- search, city-picker, weather card and instant C/F toggle. React 19 handles type-ahead and live client-side unit conversion with no reload, and supports the responsive mobile/desktop layout. Built as a Vite SPA served from its own origin, reading VITE_API_BASE_URL.
+
+**Related:** REQ-STACK
+
+### ARCH-tech-backend · approved · source: architecture:technology_decision:backend
+
+FastAPI 0.115 chosen over Express/Flask for the backend.
+
+A thin proxy is needed to keep WEATHER_API_KEY off the browser and forward geocoding/weather calls as clean JSON. FastAPI 0.115 is lightweight, async-friendly for calling an external API, and quick to build this small surface in.
+
+**Related:** REQ-STACK
+
+### ARCH-tech-database · approved · source: architecture:technology_decision:database
+
+PostgreSQL 16 chosen over stateless/SQLite as the provisioned default.
+
+Provisioned as the approved safe default should remembered searches or logging be added later. In this scope it stores nothing and sits idle, consistent with no-accounts/no-personal-data.
+
+**Related:** REQ-STACK
+
+### ARCH-tech-cloud · approved · source: architecture:technology_decision:cloud
+
+AWS chosen over GCP/Azure as the hosting platform.
+
+A free public weather page needs globally reachable hosting that scales down when quiet and absorbs spikes without managing servers. AWS (CloudFront/S3 for the SPA, a scale-to-near-zero container for the API, ElastiCache/RDS) covers this and is the platform default.
+
+**Related:** REQ-STACK
 <!-- sdlc:auto:end narrative -->
 
 <!-- sdlc:auto:start building-blocks -->
